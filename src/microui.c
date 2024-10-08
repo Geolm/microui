@@ -1206,3 +1206,70 @@ void mu_end_panel(mu_Context *ctx) {
   mu_pop_clip_rect(ctx);
   pop_container(ctx);
 }
+
+void mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, const char** entries, int expand_layout)
+{
+    // bad parameters check
+    if (expanded == NULL || index == NULL || entries == NULL || num_entries < 1)
+        return;
+
+    // look for the longest string in the entries to size the combo box
+    int longest_entry = -1;
+    int longest_index = -1;
+    for(int i=0; i<num_entries; ++i)
+    {
+        int entry_length = (int)strlen(entries[i]) + 1; // 1 character padding
+        if (entry_length>longest_entry)
+        {
+            longest_entry = entry_length;
+            longest_index = i;
+        }
+    }
+
+    if (expand_layout && *expanded)
+    {
+        mu_Layout *layout = get_layout(ctx);
+        layout->size.y += (num_entries+1) * ctx->style->title_height;
+    }
+
+    mu_Rect rect = mu_layout_next(ctx);
+    mu_Font font = ctx->style->font;
+    mu_Rect text_box = mu_rect(rect.x, rect.y, ctx->text_width(font, entries[longest_index], longest_entry) + ctx->style->padding, ctx->style->indent);
+    mu_draw_rect(ctx, text_box, ctx->style->colors[MU_COLOR_TITLEBG]);
+
+    if (*index >= 0 && *index < num_entries)
+        mu_draw_control_text(ctx, entries[*index], text_box, MU_COLOR_TEXT, MU_OPT_NOINTERACT);
+    
+    if (*expanded)
+    {
+        mu_Rect box = mu_rect(text_box.x, text_box.y + text_box.h, text_box.w, text_box.h);
+        for(int i=0; i<num_entries; ++i)
+        {
+            mu_Id entry_id = mu_get_id(ctx, &box, sizeof(mu_Rect));
+            mu_update_control(ctx, entry_id, box, 0);
+
+            // if the entry is selected, change the index and close the combo box
+            if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == entry_id)
+            {
+                *index = i;
+                *expanded = 0;
+            }
+
+            mu_Color color = (ctx->hover == entry_id) ? ctx->style->colors[MU_COLOR_BUTTONHOVER] : ctx->style->colors[MU_COLOR_TITLEBG];
+            mu_draw_rect(ctx, box, color);
+            mu_draw_control_text(ctx, entries[i], box, MU_COLOR_TEXT, MU_OPT_NOINTERACT);
+            box.y += ctx->style->indent;
+        }
+    }
+    
+    // draw the button and update the expanded bool
+    mu_Id button_id = mu_get_id(ctx, &index, sizeof(index));
+    mu_Rect icon_box = mu_rect(text_box.x + text_box.w, text_box.y, ctx->style->title_height, ctx->style->title_height);
+    mu_update_control(ctx, button_id, icon_box, 0);
+    mu_draw_control_frame(ctx, button_id, icon_box, MU_COLOR_BUTTON, 0);
+    mu_draw_icon(ctx, MU_ICON_EXPANDED, icon_box, ctx->style->colors[MU_COLOR_TEXT]);
+    if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == button_id)
+        *expanded = !*expanded;
+
+    return;
+}
