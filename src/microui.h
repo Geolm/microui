@@ -88,7 +88,8 @@ enum {
   MU_OPT_AUTOSIZE     = (1 << 9),
   MU_OPT_POPUP        = (1 << 10),
   MU_OPT_CLOSED       = (1 << 11),
-  MU_OPT_EXPANDED     = (1 << 12)
+  MU_OPT_EXPANDED     = (1 << 12),
+  MU_OPT_FORCE_SIZE   = (1 << 13)
 };
 
 enum {
@@ -210,6 +211,7 @@ struct mu_Context {
   int key_down;
   int key_pressed;
   char input_text[32];
+  void* user_data;
 };
 
 #ifdef __cplusplus
