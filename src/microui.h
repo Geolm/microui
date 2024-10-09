@@ -212,6 +212,9 @@ struct mu_Context {
   char input_text[32];
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 mu_Vec2 mu_vec2(int x, int y);
 mu_Rect mu_rect(int x, int y, int w, int h);
@@ -292,5 +295,10 @@ int mu_begin_popup(mu_Context *ctx, const char *name);
 void mu_end_popup(mu_Context *ctx);
 void mu_begin_panel_ex(mu_Context *ctx, const char *name, int opt);
 void mu_end_panel(mu_Context *ctx);
+void mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, const char** entries, int expand_layout);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
