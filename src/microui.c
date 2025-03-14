@@ -110,7 +110,7 @@ static mu_Rect intersect_rects(mu_Rect r1, mu_Rect r2) {
 }
 
 
-static int rect_overlaps_vec2(mu_Rect r, mu_Vec2 p) {
+int rect_overlaps_vec2(mu_Rect r, mu_Vec2 p) {
   return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
 }
 
@@ -183,6 +183,7 @@ void mu_end(mu_Context *ctx) {
   ctx->key_pressed = 0;
   ctx->input_text[0] = '\0';
   ctx->mouse_pressed = 0;
+  ctx->mouse_released = 0;
   ctx->scroll_delta = mu_vec2(0, 0);
   ctx->last_mouse_pos = ctx->mouse_pos;
 
@@ -211,6 +212,7 @@ void mu_end(mu_Context *ctx) {
 
 
 void mu_set_focus(mu_Context *ctx, mu_Id id) {
+  ctx->last_focus = ctx->focus;
   ctx->focus = id;
   ctx->updated_focus = 1;
 }
@@ -392,6 +394,7 @@ void mu_input_mousedown(mu_Context *ctx, int x, int y, int btn) {
 void mu_input_mouseup(mu_Context *ctx, int x, int y, int btn) {
   mu_input_mousemove(ctx, x, y);
   ctx->mouse_down &= ~btn;
+  ctx->mouse_released |= btn;
 }
 
 
@@ -735,6 +738,7 @@ int mu_button_ex(mu_Context *ctx, const char *label, int icon, int opt) {
                    : mu_get_id(ctx, &icon, sizeof(icon));
   mu_Rect r = mu_layout_next(ctx);
   mu_update_control(ctx, id, r, opt);
+
   /* handle click */
   if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == id) {
     res |= MU_RES_SUBMIT;
@@ -755,7 +759,7 @@ int mu_checkbox(mu_Context *ctx, const char *label, int *state) {
   mu_update_control(ctx, id, r, 0);
   /* handle click */
   if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == id) {
-    res |= MU_RES_CHANGE;
+    res |= MU_RES_CHANGE|MU_RES_SUBMIT;
     *state = !*state;
   }
   /* draw */
@@ -862,6 +866,8 @@ int mu_slider_ex(mu_Context *ctx, mu_Real *value, mu_Real low, mu_Real high,
   /* handle text input mode */
   if (number_textbox(ctx, &v, base, id)) { return res; }
 
+  if (last != v) { res |= MU_RES_CHANGE|MU_RES_SUBMIT; }
+
   /* handle normal mode */
   mu_update_control(ctx, id, base, opt);
 
@@ -872,6 +878,12 @@ int mu_slider_ex(mu_Context *ctx, mu_Real *value, mu_Real low, mu_Real high,
     v = low + (ctx->mouse_pos.x - base.x) * (high - low) / base.w;
     if (step) { v = ((long long)((v + step / 2) / step)) * step; }
   }
+  if (ctx->last_focus == id && (ctx->mouse_released&MU_MOUSE_LEFT))
+  {  
+    res |= MU_RES_SUBMIT;
+    mu_set_focus(ctx, 0);
+  }
+
   /* clamp and store value, update res */
   *value = v = mu_clamp(v, low, high);
   if (last != v) { res |= MU_RES_CHANGE; }
@@ -1212,6 +1224,33 @@ void mu_end_panel(mu_Context *ctx) {
 //----------------------------------------------------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------------------------------------------------
+int mu_button_icon(mu_Context *ctx, const char *label, int icon) 
+{
+  int res = 0;
+  mu_Id id = label ? mu_get_id(ctx, label, (int)strlen(label))
+                   : mu_get_id(ctx, &icon, sizeof(icon));
+  mu_Rect r = mu_layout_next(ctx);
+  r.w += r.h;
+  mu_update_control(ctx, id, r, 0);
+
+  /* handle click */
+  if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == id) {
+    res |= MU_RES_SUBMIT;
+  }
+  /* draw */
+  mu_draw_control_frame(ctx, id, r, MU_COLOR_BUTTON, 0);
+  if (label) { mu_draw_control_text(ctx, label, r, MU_COLOR_TEXT, 0); }
+  if (icon) 
+  {
+    mu_Rect icon_rect = r;
+    icon_rect.x += icon_rect.w - icon_rect.h;
+    icon_rect.w = icon_rect.h;
+    mu_draw_icon(ctx, icon, icon_rect, ctx->style->colors[MU_COLOR_TEXT]); 
+  }
+  return res;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
 int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, const char** entries)
 {
     // bad parameters check
@@ -1230,7 +1269,7 @@ int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, co
             longest_index = i;
         }
     }
-    
+
     if (*expanded)
         get_layout(ctx)->size.y += (num_entries+1) * ctx->style->title_height;
 
@@ -1242,7 +1281,7 @@ int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, co
 
     if (*index >= 0 && *index < num_entries)
         mu_draw_control_text(ctx, entries[*index], text_box, MU_COLOR_TEXT, MU_OPT_NOINTERACT);
-    
+
     if (*expanded)
     {
         mu_Rect box = mu_rect(text_box.x, text_box.y + text_box.h, text_box.w, text_box.h);
@@ -1254,18 +1293,20 @@ int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, co
             // if the entry is selected, change the index and close the combo box
             if (ctx->mouse_pressed == MU_MOUSE_LEFT && ctx->focus == entry_id)
             {
-                *index = i;
+                if (*index != i)
+                {
+                  res |= MU_RES_CHANGE|MU_RES_SUBMIT;
+                  *index = i;
+                }
                 *expanded = 0;
-                res |= MU_RES_CHANGE;
             }
-
             mu_Color color = (ctx->hover == entry_id) ? ctx->style->colors[MU_COLOR_BUTTONHOVER] : ctx->style->colors[MU_COLOR_TITLEBG];
             mu_draw_rect(ctx, box, color);
             mu_draw_control_text(ctx, entries[i], box, MU_COLOR_TEXT, MU_OPT_NOINTERACT);
             box.y += ctx->style->indent;
         }
     }
-    
+
     // draw the button and update the expanded bool
     mu_Id button_id = mu_get_id(ctx, &index, sizeof(index));
     mu_Rect icon_box = mu_rect(text_box.x + text_box.w, text_box.y, ctx->style->title_height, ctx->style->title_height);
@@ -1281,9 +1322,6 @@ int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, co
 //----------------------------------------------------------------------------------------------------------------------------
 int mu_rgb_color(mu_Context *ctx, float *red, float *green, float *blue)
 {
-    const float hash_array[3] = {*red, *green, *blue};
-    mu_Id     id = mu_get_id(ctx, hash_array, sizeof(hash_array));
-    
     int res = 0;
     mu_layout_row(ctx, 2, (int[]) { 100, -1 }, 0);
     mu_label(ctx, "color");
@@ -1296,5 +1334,95 @@ int mu_rgb_color(mu_Context *ctx, float *red, float *green, float *blue)
     mu_label(ctx, "blue");
     res |= mu_slider_ex(ctx, blue, 0.f, 1.f, 0.001f, "%1.2f", 0);
     return res;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+int mu_combo_button(mu_Context *ctx, const char* button_name, int num_entries, const char** entries, int* output)
+{
+  int res = 0;
+
+  if (mu_button_icon(ctx, button_name, MU_ICON_COLLAPSED))
+    mu_open_popup(ctx, button_name);
+
+  if (mu_begin_popup(ctx, button_name))
+  {
+    for(int i=0; i<num_entries; ++i)
+    {
+      // add a check on the right of the selected entry
+      if (mu_button_icon(ctx, entries[i], (*output == i) ? MU_ICON_CHECK : 0))
+      {
+        if  (*output != i)
+        {
+          *output = i;
+          res |= MU_RES_SUBMIT;
+        }
+        else
+          res |= MU_RES_CHANGE;
+      }
+    }
+
+    mu_Container* container =  mu_get_current_container(ctx);
+      container->rect.w += ctx->style->title_height;
+
+    mu_end_popup(ctx);
+  }
+  return res;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+int mu_slider_gradient(mu_Context *ctx, mu_Real *value, mu_Real low, mu_Real high, mu_Real step, const char *fmt, int opt, gradient_function gradient, void* user_data)
+{
+  char buf[MU_MAX_FMT + 1];
+  mu_Rect thumb;
+  int x, w, res = 0;
+  mu_Real last = *value, v = last;
+  mu_Id id = mu_get_id(ctx, &value, sizeof(value));
+  mu_Rect base = mu_layout_next(ctx);
+
+  /* handle text input mode */
+  if (number_textbox(ctx, &v, base, id)) { return res; }
+
+  if (last != v) { res |= MU_RES_CHANGE|MU_RES_SUBMIT; }
+
+  /* handle normal mode */
+  mu_update_control(ctx, id, base, opt);
+
+  /* handle input */
+  if (ctx->focus == id &&
+      (ctx->mouse_down | ctx->mouse_pressed) == MU_MOUSE_LEFT)
+  {
+    v = low + (ctx->mouse_pos.x - base.x) * (high - low) / base.w;
+    if (step) { v = ((long long)((v + step / 2) / step)) * step; }
+  }
+
+  if (ctx->last_focus == id && (ctx->mouse_released&MU_MOUSE_LEFT))
+  {  
+    res |= MU_RES_SUBMIT;
+    mu_set_focus(ctx, 0);
+  }
+
+  /* clamp and store value, update res */
+  *value = v = mu_clamp(v, low, high);
+  if (last != v) { res |= MU_RES_CHANGE; }
+
+  /* draw gradient */
+  mu_Real gradient_step = 2.f / (float) base.w;
+  mu_Real gradient_input = 0.f;
+  for(int x=0; x<base.w; x+=2)
+  {
+    mu_draw_rect(ctx, mu_rect(base.x + x, base.y, 2, base.h), gradient(gradient_input, user_data));
+    gradient_input += gradient_step;
+  }
+
+  /* draw thumb */
+  w = ctx->style->thumb_size;
+  x = (v - low) * (base.w - w) / (high - low);
+  thumb = mu_rect(base.x + x, base.y, w, base.h);
+  mu_draw_control_frame(ctx, id, thumb, MU_COLOR_BUTTON, opt);
+  /* draw text  */
+  sprintf(buf, fmt, v);
+  mu_draw_control_text(ctx, buf, base, MU_COLOR_TEXT, opt);
+
+  return res;
 }
 

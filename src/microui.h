@@ -180,6 +180,7 @@ struct mu_Context {
   mu_Style *style;
   mu_Id hover;
   mu_Id focus;
+  mu_Id last_focus;
   mu_Id last_id;
   mu_Rect last_rect;
   int last_zindex;
@@ -208,11 +209,14 @@ struct mu_Context {
   mu_Vec2 scroll_delta;
   int mouse_down;
   int mouse_pressed;
+  int mouse_released;
   int key_down;
   int key_pressed;
   char input_text[32];
   void* user_data;
 };
+
+typedef mu_Color (*gradient_function)(mu_Real value, void* user_data);
 
 #ifdef __cplusplus
 extern "C" {
@@ -268,6 +272,7 @@ mu_Rect mu_layout_next(mu_Context *ctx);
 void mu_draw_control_frame(mu_Context *ctx, mu_Id id, mu_Rect rect, int colorid, int opt);
 void mu_draw_control_text(mu_Context *ctx, const char *str, mu_Rect rect, int colorid, int opt);
 int mu_mouse_over(mu_Context *ctx, mu_Rect rect);
+int rect_overlaps_vec2(mu_Rect r, mu_Vec2 p);
 void mu_update_control(mu_Context *ctx, mu_Id id, mu_Rect rect, int opt);
 
 #define mu_button(ctx, label)             mu_button_ex(ctx, label, 0, MU_OPT_ALIGNCENTER)
@@ -282,6 +287,7 @@ void mu_update_control(mu_Context *ctx, mu_Id id, mu_Rect rect, int opt);
 void mu_text(mu_Context *ctx, const char *text);
 void mu_label(mu_Context *ctx, const char *text);
 int mu_button_ex(mu_Context *ctx, const char *label, int icon, int opt);
+int mu_button_icon(mu_Context *ctx, const char *label, int icon);
 int mu_checkbox(mu_Context *ctx, const char *label, int *state);
 int mu_textbox_raw(mu_Context *ctx, char *buf, int bufsz, mu_Id id, mu_Rect r, int opt);
 int mu_textbox_ex(mu_Context *ctx, char *buf, int bufsz, int opt);
@@ -299,6 +305,8 @@ void mu_begin_panel_ex(mu_Context *ctx, const char *name, int opt);
 void mu_end_panel(mu_Context *ctx);
 int mu_combo_box(mu_Context *ctx, int* expanded, int* index, int num_entries, const char** entries);
 int mu_rgb_color(mu_Context *ctx, float *red, float *green, float *blue);
+int mu_combo_button(mu_Context *ctx, const char* button_name, int num_entries, const char** entries, int* output);
+int mu_slider_gradient(mu_Context *ctx, mu_Real *value, mu_Real low, mu_Real high, mu_Real step, const char *fmt, int opt, gradient_function gradient, void* user_data);
 
 #ifdef __cplusplus
 }
