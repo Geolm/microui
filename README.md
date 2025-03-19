@@ -1,5 +1,7 @@
 ## geolm fork features
-* combo box (WIP)
+* combo box
+* button with icon
+* button opening a list
 * C++ compilation support
 
 
