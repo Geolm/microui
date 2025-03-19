@@ -2,6 +2,7 @@
 * combo box
 * button with icon
 * button opening a list
+* slider with a gradient (use a callback)
 * C++ compilation support
 
 
